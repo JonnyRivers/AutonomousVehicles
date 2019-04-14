@@ -38,32 +38,20 @@ class Controller2D(object):
         if self._current_frame:
             self._start_control_loop = True
 
-    def update_desired_targets(self):
+    def get_closest_waypoint(self, x, y):
         min_idx       = 0
         min_dist      = float("inf")
-        desired_x = 0
-        desired_y = 0
-        desired_speed = 0
         for i in range(len(self._waypoints)):
             dist = np.linalg.norm(np.array([
-                    self._waypoints[i][0] - self._current_x,
-                    self._waypoints[i][1] - self._current_y]))
+                    self._waypoints[i][0] - x,
+                    self._waypoints[i][1] - y]))
             if dist < min_dist:
                 min_dist = dist
                 min_idx = i
         if min_idx < len(self._waypoints)-1:
-            desired_x = self._waypoints[min_idx][0]
-            desired_y = self._waypoints[min_idx][1]
-            desired_speed = self._waypoints[min_idx][2]
-        else:
-            desired_x = self._waypoints[-1][0]
-            desired_y = self._waypoints[-1][1]
-            desired_speed = self._waypoints[-1][2]
-
-        print(f"desired_speed: {desired_speed}; min_idx: {min_idx}; min_dist: {min_dist}")
-        self._desired_x = desired_x
-        self._desired_y = desired_y
-        self._desired_speed = desired_speed
+            return self._waypoints[min_idx]
+        
+        return self._waypoints[-1]
 
     def update_waypoints(self, new_waypoints):
         self._waypoints = new_waypoints
@@ -97,10 +85,8 @@ class Controller2D(object):
         y               = self._current_y
         yaw             = self._current_yaw
         v               = self._current_speed
-        self.update_desired_targets()
-        x_desired       = self._desired_x
-        y_desired       = self._desired_y
-        v_desired       = self._desired_speed
+        closest_waypoint = self.get_closest_waypoint(x, y)
+        v_desired       = closest_waypoint[2]
         t               = self._current_timestamp
         waypoints       = self._waypoints
         throttle_output = 0
@@ -175,9 +161,9 @@ class Controller2D(object):
                 example, can treat self.vars.v_previous like a "global variable".
             """
             
-            k_p = 4
-            k_i = 2
-            k_d = 2
+            k_p = 1.8
+            k_i = 1
+            k_d = 0.3
 
             v_error = v_desired - v
             throttle_p = v_error * k_p
@@ -214,20 +200,27 @@ class Controller2D(object):
             # Change the steer output with the lateral controller. 
             steer_output = 0
 
-            # TODO
-            # x_desired and y_desired are from the next point, so we are wildly oversteering
+            lookahead_distance = v * 0.5
+            lookahead_x = x + np.sin(yaw) * lookahead_distance
+            lookahead_y = y + np.cos(yaw) * lookahead_distance
+            lookahead_waypoint = self.get_closest_waypoint(lookahead_x, lookahead_y)
 
-            # 1) Steer to align with desired heading            
+            # 1) Steer to align with desired heading
+            x_desired = lookahead_waypoint[0]
+            y_desired = lookahead_waypoint[1]
             x_e = x_desired - x
             y_e = y_desired - y
 
             yaw_desired = np.arctan2(x_e, y_e)
-            #yaw_desired = np.tan(x_e / y_e)
             yaw_e = yaw_desired - yaw
 
             steer_output = yaw_e
-            #print(f"steer: {steer_output}; pos: ({x},{y}); pos_d: ({x_desired},{y_desired}); yaw: {yaw}; yaw_d: {yaw_desired}")
+            print(f"ld: {lookahead_distance}; yaw_e: {yaw_e}; v_e: {v_error}")
             #steer_output = 0
+
+            # temp clamp to prevent wild oversteer
+            steer_output = min(steer_output, 0.3)
+            steer_output = max(steer_output, -0.3)
 
             # 2) Steer to eliminate crosstrack error
             # TODO
