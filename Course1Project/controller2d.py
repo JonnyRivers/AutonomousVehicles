@@ -247,19 +247,26 @@ class Controller2D(object):
             
             #print(f"yaw: {yaw}; yaw_desired: {yaw_desired}; closest({closest_x},{closest_y}); heading({heading_x},{heading_y}); pos_e({x_e}, {y_e})")
 
-            steer_output = yaw_e
+            
 
             # 2) Steer to eliminate crosstrack error
-            # TODO
-
-            crosstrack_e = 0
             distance_x = closest_waypoint[0] - x
             distance_y = closest_waypoint[1] - y
             distance_x_squared = distance_x * distance_x
             distance_y_squared = distance_y * distance_y
-            distance_e = np.sqrt(distance_x_squared + distance_y_squared)
+            crosstrack_e = np.sqrt(distance_x_squared + distance_y_squared)
+            if(distance_x + distance_y < 0):
+                crosstrack_e = -crosstrack_e
+            # TODO this isn't quite the crosstrack error, bt it's close enough for now
 
-            print(f"distance_e: {distance_e}; v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}")
+            crosstrack_correction_steer = np.arctan(crosstrack_e / v)
+            # prevent noise
+            if(crosstrack_e < 0.1):
+                crosstrack_correction_steer = 0
+
+            print(f" v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}; ccs: {crosstrack_correction_steer}")
+
+            steer_output = yaw_e + crosstrack_correction_steer
 
             # 3) Clamp
             steer_output = min(steer_output, 1.22)
