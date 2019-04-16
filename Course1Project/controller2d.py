@@ -38,7 +38,7 @@ class Controller2D(object):
         if self._current_frame:
             self._start_control_loop = True
 
-    def get_closest_waypoint(self, x, y):
+    def get_closest_waypoint_index(self, x, y):
         min_idx       = 0
         min_dist      = float("inf")
         for i in range(len(self._waypoints)):
@@ -48,11 +48,32 @@ class Controller2D(object):
             if dist < min_dist:
                 min_dist = dist
                 min_idx = i
-        if min_idx < len(self._waypoints)-1:
-            return self._waypoints[min_idx]
-        
-        return self._waypoints[-1]
 
+        if min_idx < len(self._waypoints)-1:
+            return min_idx
+        
+        return -1
+
+    def get_heading_waypoint_index(self, closest_waypoint_index, v):
+        min_heading_waypoint_distance = v # distance traveled in one second
+        closest_waypoint = self._waypoints[closest_waypoint_index]
+        closest_waypoint_x = closest_waypoint[0]
+        closest_waypoint_y = closest_waypoint[1]
+        last_waypoint_to_check_index = min(closest_waypoint_index + 100, len(self._waypoints)-1)
+        for i in range(closest_waypoint_index+1, last_waypoint_to_check_index-1):
+            forward_waypoint = self._waypoints[i]
+            forward_waypoint_x = forward_waypoint[0]
+            forward_waypoint_y = forward_waypoint[1]
+            distance_x = forward_waypoint_x - closest_waypoint_x
+            distance_y = forward_waypoint_y - closest_waypoint_y
+            distance_x_squared = distance_x * distance_x
+            distance_y_squared = distance_y * distance_y
+            distance_to_forward_waypoint = np.sqrt(distance_x_squared + distance_y_squared)
+            if(distance_to_forward_waypoint > min_heading_waypoint_distance):
+                return i
+        
+        return last_waypoint_to_check_index
+    
     def update_waypoints(self, new_waypoints):
         self._waypoints = new_waypoints
 
@@ -85,10 +106,12 @@ class Controller2D(object):
         y               = self._current_y
         yaw             = self._current_yaw
         v               = self._current_speed
-        closest_waypoint = self.get_closest_waypoint(x, y)
-        v_desired       = closest_waypoint[2]
         t               = self._current_timestamp
         waypoints       = self._waypoints
+
+        closest_waypoint_index = self.get_closest_waypoint_index(x, y)
+        v_desired = waypoints[closest_waypoint_index][2]
+
         throttle_output = 0
         steer_output    = 0
         brake_output    = 0
@@ -200,14 +223,12 @@ class Controller2D(object):
             # Change the steer output with the lateral controller. 
             steer_output = 0
 
-            lookahead_distance = v * 0.5
-            lookahead_x = x + np.sin(yaw) * lookahead_distance
-            lookahead_y = y + np.cos(yaw) * lookahead_distance
-            lookahead_waypoint = self.get_closest_waypoint(lookahead_x, lookahead_y)
+            heading_waypoint_index = self.get_heading_waypoint_index(closest_waypoint_index, v)
+            heading_waypoint = waypoints[heading_waypoint_index]
 
             # 1) Steer to align with desired heading
-            x_desired = lookahead_waypoint[0]
-            y_desired = lookahead_waypoint[1]
+            x_desired = heading_waypoint[0]
+            y_desired = heading_waypoint[1]
             x_e = x_desired - x
             y_e = y_desired - y
 
@@ -215,12 +236,12 @@ class Controller2D(object):
             yaw_e = yaw_desired - yaw
 
             steer_output = yaw_e
-            print(f"ld: {lookahead_distance}; yaw_e: {yaw_e}; v_e: {v_error}")
+            print(f"pos: ({x},{y}); heaing: ({x_desired}, {y_desired}); yaw_e: {yaw_e}; v_e: {v_error}")
             #steer_output = 0
 
             # temp clamp to prevent wild oversteer
-            steer_output = min(steer_output, 0.3)
-            steer_output = max(steer_output, -0.3)
+            #steer_output = min(steer_output, 0.3)
+            #steer_output = max(steer_output, -0.3)
 
             # 2) Steer to eliminate crosstrack error
             # TODO
