@@ -55,11 +55,11 @@ class Controller2D(object):
         return -1
 
     def get_heading_waypoint_index(self, closest_waypoint_index, v):
-        min_heading_waypoint_distance = v # distance traveled in one second
+        min_heading_waypoint_distance = max(1, v) # distance traveled in one second
         closest_waypoint = self._waypoints[closest_waypoint_index]
         closest_waypoint_x = closest_waypoint[0]
         closest_waypoint_y = closest_waypoint[1]
-        last_waypoint_to_check_index = min(closest_waypoint_index + 100, len(self._waypoints)-1)
+        last_waypoint_to_check_index = len(self._waypoints)-1
         for i in range(closest_waypoint_index+1, last_waypoint_to_check_index-1):
             forward_waypoint = self._waypoints[i]
             forward_waypoint_x = forward_waypoint[0]
@@ -110,7 +110,8 @@ class Controller2D(object):
         waypoints       = self._waypoints
 
         closest_waypoint_index = self.get_closest_waypoint_index(x, y)
-        v_desired = waypoints[closest_waypoint_index][2]
+        closest_waypoint = waypoints[closest_waypoint_index]
+        v_desired = closest_waypoint[2]
 
         throttle_output = 0
         steer_output    = 0
@@ -184,9 +185,9 @@ class Controller2D(object):
                 example, can treat self.vars.v_previous like a "global variable".
             """
             
-            k_p = 1.8
+            k_p = 2.5
             k_i = 1
-            k_d = 0.3
+            k_d = -1
 
             v_error = v_desired - v
             throttle_p = v_error * k_p
@@ -201,7 +202,7 @@ class Controller2D(object):
             throttle_output = throttle_p + throttle_i + throttle_d
             throttle_output = min(throttle_output, 1)
             throttle_output = max(throttle_output, 0)
-            #print(f"throttle: {throttle_output}; p: {throttle_p}; i: {throttle_i}; d: {throttle_d}")
+            print(f"throttle: {throttle_output}; p: {throttle_p}; i: {throttle_i}; d: {throttle_d}")
 
             # Change these outputs with the longitudinal controller. Note that
             # brake_output is optional and is not required to pass the
@@ -227,24 +228,32 @@ class Controller2D(object):
             heading_waypoint = waypoints[heading_waypoint_index]
 
             # 1) Steer to align with desired heading
-            x_desired = heading_waypoint[0]
-            y_desired = heading_waypoint[1]
-            x_e = x_desired - x
-            y_e = y_desired - y
+            closest_x = closest_waypoint[0]
+            closest_y = closest_waypoint[1]
+            heading_x = heading_waypoint[0]
+            heading_y = heading_waypoint[1]
+            x_e = heading_x - closest_x
+            y_e = heading_y - closest_y
 
-            yaw_desired = np.arctan2(x_e, y_e)
+            # TODO fix the goofiness here
+            yaw_desired = np.arctan2(-x_e, y_e) + (np.pi / 2)
+            if(yaw_desired > np.pi):
+                yaw_desired = yaw_desired - (2 * np.pi)
             yaw_e = yaw_desired - yaw
+            if(yaw_e > np.pi):
+                yaw_e = yaw_e - (2 * np.pi)
+            if(yaw_e < -np.pi):
+                yaw_e = yaw_e + (2 * np.pi)
+            
+            #print(f"yaw: {yaw}; yaw_desired: {yaw_desired}; closest({closest_x},{closest_y}); heading({heading_x},{heading_y}); pos_e({x_e}, {y_e})")
 
             steer_output = yaw_e
-            print(f"pos: ({x},{y}); heaing: ({x_desired}, {y_desired}); yaw_e: {yaw_e}; v_e: {v_error}")
-            #steer_output = 0
-
-            # temp clamp to prevent wild oversteer
-            #steer_output = min(steer_output, 0.3)
-            #steer_output = max(steer_output, -0.3)
 
             # 2) Steer to eliminate crosstrack error
             # TODO
+            crosstrack_e = 0
+
+            print(f"v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}")
 
             # 3) Clamp
             steer_output = min(steer_output, 1.22)
