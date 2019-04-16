@@ -261,7 +261,7 @@ class Controller2D(object):
 
             crosstrack_correction_steer = np.arctan(crosstrack_e / v)
             # prevent noise
-            if(crosstrack_e < 0.1):
+            if(crosstrack_e < 0.1 and crosstrack_e > -0.1):
                 crosstrack_correction_steer = 0
 
             print(f" v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}; ccs: {crosstrack_correction_steer}")
