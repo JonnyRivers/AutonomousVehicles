@@ -187,7 +187,7 @@ class Controller2D(object):
             
             k_p = 2.5
             k_i = 1
-            k_d = -1
+            k_d = 2
 
             v_error = v_desired - v
             throttle_p = v_error * k_p
@@ -202,7 +202,7 @@ class Controller2D(object):
             throttle_output = throttle_p + throttle_i + throttle_d
             throttle_output = min(throttle_output, 1)
             throttle_output = max(throttle_output, 0)
-            print(f"throttle: {throttle_output}; p: {throttle_p}; i: {throttle_i}; d: {throttle_d}")
+            #print(f"throttle: {throttle_output}; p: {throttle_p}; i: {throttle_i}; d: {throttle_d}")
 
             # Change these outputs with the longitudinal controller. Note that
             # brake_output is optional and is not required to pass the
@@ -251,9 +251,15 @@ class Controller2D(object):
 
             # 2) Steer to eliminate crosstrack error
             # TODO
-            crosstrack_e = 0
 
-            print(f"v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}")
+            crosstrack_e = 0
+            distance_x = closest_waypoint[0] - x
+            distance_y = closest_waypoint[1] - y
+            distance_x_squared = distance_x * distance_x
+            distance_y_squared = distance_y * distance_y
+            distance_e = np.sqrt(distance_x_squared + distance_y_squared)
+
+            print(f"distance_e: {distance_e}; v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}")
 
             # 3) Clamp
             steer_output = min(steer_output, 1.22)
