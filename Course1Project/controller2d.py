@@ -263,7 +263,8 @@ class Controller2D(object):
             if(yaw_e < -np.pi):
                 yaw_e = yaw_e + (2 * np.pi)
             
-            #print(f"yaw: {yaw}; yaw_desired: {yaw_desired}; closest({closest_x},{closest_y}); heading({heading_x},{heading_y}); pos_e({x_e}, {y_e})")
+            print(f"yaw: {yaw}; yaw_desired: {yaw_desired}; pos: ({x},{y}); closest: ({closest_x},{closest_y});")
+            #print(f" heading({heading_x},{heading_y}); pos_e({x_e}, {y_e})")
 
             # 2) Steer to eliminate crosstrack error
             distance_x = closest_waypoint[0] - x
@@ -272,14 +273,17 @@ class Controller2D(object):
             distance_y_squared = distance_y * distance_y
             crosstrack_dist = np.sqrt(distance_x_squared + distance_y_squared)
 
+            # TODO pipeline all these hacks
             angle_to_closest_waypoint = np.arctan2(distance_x, distance_y) + (np.pi / 2)
+            if(angle_to_closest_waypoint > np.pi):
+                angle_to_closest_waypoint = angle_to_closest_waypoint - (2 * np.pi)
 
             alpha = get_dp_right_of_a_to_b(yaw, angle_to_closest_waypoint)
 
-            crosstrack_e= 0
-            if(alpha > 0.3):
+            crosstrack_e = 0
+            if(alpha > 0.7):
                 crosstrack_e = -crosstrack_dist
-            elif(alpha < -0.3):
+            elif(alpha < -0.7):
                 crosstrack_e = crosstrack_dist
 
             crosstrack_correction_steer = np.arctan(crosstrack_e / v)
@@ -287,7 +291,8 @@ class Controller2D(object):
             if(crosstrack_e < 0.01 and crosstrack_e > -0.01):
                 crosstrack_correction_steer = 0
 
-            print(f"alpha: {alpha}; v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}; ccs: {crosstrack_correction_steer}; a to waypoint: {angle_to_closest_waypoint}")
+            print(f"v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}")
+            print(f"ccs: {crosstrack_correction_steer}; yaw: {yaw}; atcwp: {angle_to_closest_waypoint}; alpha: {alpha}")
 
             steer_output = yaw_e + crosstrack_correction_steer
 
