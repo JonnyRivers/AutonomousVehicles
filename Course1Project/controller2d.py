@@ -7,6 +7,24 @@
 import cutils
 import numpy as np
 
+def yaw_to_point(yaw):
+    return np.sin(yaw), np.cos(yaw)
+
+def get_dp_right_of_a_to_b(a, b):
+    right_of_a = a + np.pi / 2
+    if(right_of_a > np.pi):
+        right_of_a = right_of_a - 2 * np.pi
+
+    right_of_a_x, right_of_a_y = yaw_to_point(right_of_a)
+    b_x, b_y = yaw_to_point(b)
+
+    dp = np.dot([right_of_a_x, right_of_a_y], [b_x, b_y])
+
+    #a_x, a_y = yaw_to_point(a)
+    #print(f"a:{a}; roa:{right_of_a}; b:{b}; A:({a_x},{a_y}) & ({right_of_a_x},{right_of_a_y}).({b_x},{b_y})={dp}")
+
+    return dp
+
 class Controller2D(object):
     def __init__(self, waypoints):
         self.vars                = cutils.CUtils()
@@ -247,24 +265,29 @@ class Controller2D(object):
             
             #print(f"yaw: {yaw}; yaw_desired: {yaw_desired}; closest({closest_x},{closest_y}); heading({heading_x},{heading_y}); pos_e({x_e}, {y_e})")
 
-            
-
             # 2) Steer to eliminate crosstrack error
             distance_x = closest_waypoint[0] - x
             distance_y = closest_waypoint[1] - y
             distance_x_squared = distance_x * distance_x
             distance_y_squared = distance_y * distance_y
-            crosstrack_e = np.sqrt(distance_x_squared + distance_y_squared)
-            if(distance_x + distance_y < 0):
-                crosstrack_e = -crosstrack_e
-            # TODO this isn't quite the crosstrack error, bt it's close enough for now
+            crosstrack_dist = np.sqrt(distance_x_squared + distance_y_squared)
+
+            angle_to_closest_waypoint = np.arctan2(distance_x, distance_y) + (np.pi / 2)
+
+            alpha = get_dp_right_of_a_to_b(yaw, angle_to_closest_waypoint)
+
+            crosstrack_e= 0
+            if(alpha > 0.3):
+                crosstrack_e = -crosstrack_dist
+            elif(alpha < -0.3):
+                crosstrack_e = crosstrack_dist
 
             crosstrack_correction_steer = np.arctan(crosstrack_e / v)
             # prevent noise
-            if(crosstrack_e < 0.1 and crosstrack_e > -0.1):
+            if(crosstrack_e < 0.01 and crosstrack_e > -0.01):
                 crosstrack_correction_steer = 0
 
-            print(f" v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}; ccs: {crosstrack_correction_steer}")
+            print(f"alpha: {alpha}; v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}; ccs: {crosstrack_correction_steer}; a to waypoint: {angle_to_closest_waypoint}")
 
             steer_output = yaw_e + crosstrack_correction_steer
 
