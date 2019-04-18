@@ -7,28 +7,29 @@
 import cutils
 import numpy as np
 
-def yaw_to_point(yaw):
-    return np.sin(yaw), np.cos(yaw)
+def heading_to_direction(heading):
+    return np.sin(heading), np.cos(heading)
 
-def get_yaw_desired(x, y):
-    yaw_desired = np.arctan2(-x, y) + (np.pi / 2)
-    if(yaw_desired > np.pi):
-        yaw_desired = yaw_desired - (2 * np.pi)
+def normalize_heading(heading):
+    if(heading > np.pi):
+        heading = heading - (2 * np.pi)
     
-    return yaw_desired
+    if(heading < -np.pi):
+        heading = heading + (2 * np.pi)
+    
+    return heading
 
-def get_dp_right_of_a_to_b(a, b):
-    right_of_a = a + np.pi / 2
-    if(right_of_a > np.pi):
-        right_of_a = right_of_a - 2 * np.pi
+def direction_to_heading(x, y):
+    heading = np.arctan2(-x, y) + (np.pi / 2)
+    heading = normalize_heading(heading)
+    
+    return heading
 
-    right_of_a_x, right_of_a_y = yaw_to_point(right_of_a)
-    b_x, b_y = yaw_to_point(b)
+def get_dp(a, b):
+    a_x, a_y = heading_to_direction(a)
+    b_x, b_y = heading_to_direction(b)
 
-    dp = np.dot([right_of_a_x, right_of_a_y], [b_x, b_y])
-
-    #a_x, a_y = yaw_to_point(a)
-    #print(f"a:{a}; roa:{right_of_a}; b:{b}; A:({a_x},{a_y}) & ({right_of_a_x},{right_of_a_y}).({b_x},{b_y})={dp}")
+    dp = np.dot([a_x, a_y], [b_x, b_y])
 
     return dp
 
@@ -164,6 +165,7 @@ class Controller2D(object):
         """
         self.vars.create_var('v_previous', 0.0)
         self.vars.create_var('v_error_previous', 0.0)
+        self.vars.create_var('v_error_total', 0.0)
 
         # Skip the first frame to store previous values properly
         if self._start_control_loop:
@@ -210,13 +212,13 @@ class Controller2D(object):
                 example, can treat self.vars.v_previous like a "global variable".
             """
             
-            k_p = 2.5
+            k_p = 3.0
             k_i = 1
-            k_d = 2
+            k_d = -1.2
 
             v_error = v_desired - v
+
             throttle_p = v_error * k_p
-            #print(f"v_error = {v_error} ({v_desired} - {v})")
             
             v_error_integral = 0
             throttle_i = v_error_integral * k_i
@@ -227,7 +229,8 @@ class Controller2D(object):
             throttle_output = throttle_p + throttle_i + throttle_d
             throttle_output = min(throttle_output, 1)
             throttle_output = max(throttle_output, 0)
-            #print(f"throttle: {throttle_output}; p: {throttle_p}; i: {throttle_i}; d: {throttle_d}")
+            #print(f"avg(v_e): {self.vars.v_error_total / t}; sum(v_e): {self.vars.v_error_total}")
+            #print(f"v_e: {v_error}; p: {throttle_p}; i: {throttle_i}; d: {throttle_d}; throttle: {throttle_output}")
 
             # Change these outputs with the longitudinal controller. Note that
             # brake_output is optional and is not required to pass the
@@ -261,14 +264,10 @@ class Controller2D(object):
             y_e = heading_y - closest_y
 
             # TODO fix the goofiness here
-            yaw_desired = get_yaw_desired(x_e, y_e)
-            yaw_e = yaw_desired - yaw
-            if(yaw_e > np.pi):
-                yaw_e = yaw_e - (2 * np.pi)
-            if(yaw_e < -np.pi):
-                yaw_e = yaw_e + (2 * np.pi)
+            yaw_desired = direction_to_heading(x_e, y_e)
+            yaw_e = normalize_heading(yaw_desired - yaw)
             
-            print(f"yaw: {yaw}; yaw_desired: {yaw_desired}; pos: ({x},{y}); closest: ({closest_x},{closest_y});")
+            #print(f"yaw: {yaw}; yaw_desired: {yaw_desired}; pos: ({x},{y}); closest: ({closest_x},{closest_y});")
             #print(f" heading({heading_x},{heading_y}); pos_e({x_e}, {y_e})")
 
             # 2) Steer to eliminate crosstrack error
@@ -278,26 +277,17 @@ class Controller2D(object):
             distance_y_squared = distance_y * distance_y
             crosstrack_dist = np.sqrt(distance_x_squared + distance_y_squared)
 
-            # TODO pipeline all these hacks
-            angle_to_closest_waypoint = np.arctan2(-distance_x, distance_y) + (np.pi / 2)
-            if(angle_to_closest_waypoint > np.pi):
-                angle_to_closest_waypoint = angle_to_closest_waypoint - (2 * np.pi)
-
-            alpha = get_dp_right_of_a_to_b(yaw, angle_to_closest_waypoint)
+            angle_to_closest_waypoint = direction_to_heading(distance_x, distance_y)
+            right_of_heading = normalize_heading(yaw + np.pi / 2)
+            dp_right_to_waypoint = get_dp(right_of_heading, angle_to_closest_waypoint)
 
             crosstrack_e = 0
-            if(alpha > 0.5):
-                crosstrack_e = crosstrack_dist * alpha
-            elif(alpha < -0.5):
-                crosstrack_e = crosstrack_dist * alpha
-
+            if(np.abs(dp_right_to_waypoint) > 0.5):
+                crosstrack_e = crosstrack_dist * dp_right_to_waypoint
             crosstrack_correction_steer = np.arctan(crosstrack_e / v)
-            # prevent noise
-            if(crosstrack_e < 0.01 and crosstrack_e > -0.01):
-                crosstrack_correction_steer = 0
 
-            print(f"v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}")
-            print(f"ccs: {crosstrack_correction_steer}; yaw: {yaw}; atcwp: {angle_to_closest_waypoint}; alpha: {alpha}")
+            #print(f"v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}")
+            #print(f"ccs: {crosstrack_correction_steer}; yaw: {yaw}; atcwp: {angle_to_closest_waypoint}; alpha: {alpha}")
 
             steer_output = yaw_e + crosstrack_correction_steer
 
@@ -324,3 +314,4 @@ class Controller2D(object):
         """
         self.vars.v_previous = v  # Store forward speed to be used in next step
         self.vars.v_error_previous = v_error
+        self.vars.v_error_total = self.vars.v_error_total + v_error
