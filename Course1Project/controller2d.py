@@ -10,6 +10,13 @@ import numpy as np
 def yaw_to_point(yaw):
     return np.sin(yaw), np.cos(yaw)
 
+def get_yaw_desired(x, y):
+    yaw_desired = np.arctan2(-x, y) + (np.pi / 2)
+    if(yaw_desired > np.pi):
+        yaw_desired = yaw_desired - (2 * np.pi)
+    
+    return yaw_desired
+
 def get_dp_right_of_a_to_b(a, b):
     right_of_a = a + np.pi / 2
     if(right_of_a > np.pi):
@@ -254,9 +261,7 @@ class Controller2D(object):
             y_e = heading_y - closest_y
 
             # TODO fix the goofiness here
-            yaw_desired = np.arctan2(-x_e, y_e) + (np.pi / 2)
-            if(yaw_desired > np.pi):
-                yaw_desired = yaw_desired - (2 * np.pi)
+            yaw_desired = get_yaw_desired(x_e, y_e)
             yaw_e = yaw_desired - yaw
             if(yaw_e > np.pi):
                 yaw_e = yaw_e - (2 * np.pi)
@@ -274,17 +279,17 @@ class Controller2D(object):
             crosstrack_dist = np.sqrt(distance_x_squared + distance_y_squared)
 
             # TODO pipeline all these hacks
-            angle_to_closest_waypoint = np.arctan2(distance_x, distance_y) + (np.pi / 2)
+            angle_to_closest_waypoint = np.arctan2(-distance_x, distance_y) + (np.pi / 2)
             if(angle_to_closest_waypoint > np.pi):
                 angle_to_closest_waypoint = angle_to_closest_waypoint - (2 * np.pi)
 
             alpha = get_dp_right_of_a_to_b(yaw, angle_to_closest_waypoint)
 
             crosstrack_e = 0
-            if(alpha > 0.7):
-                crosstrack_e = -crosstrack_dist
-            elif(alpha < -0.7):
-                crosstrack_e = crosstrack_dist
+            if(alpha > 0.5):
+                crosstrack_e = crosstrack_dist * alpha
+            elif(alpha < -0.5):
+                crosstrack_e = crosstrack_dist * alpha
 
             crosstrack_correction_steer = np.arctan(crosstrack_e / v)
             # prevent noise
