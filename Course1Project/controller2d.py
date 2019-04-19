@@ -33,6 +33,39 @@ def get_dp(a, b):
 
     return dp
 
+class ScalarRingBuffer:
+    def __init__(self, capacity):
+        if(capacity < 1):
+            raise Exception("capacity must be at least 1")
+
+        self._capacity = capacity
+        self._size = 0
+        self._nextIndex = 0
+        self._values = []
+
+    def insert(self, value):
+        if(self._size < self._capacity):
+            self._size = self._size + 1
+            self._nextIndex = self._nextIndex + 1
+            if(self._nextIndex == self._capacity):
+                self._nextIndex = 0
+            self._values.append(value)
+        else:
+            self._values[self._nextIndex] = value
+            self._nextIndex = self._nextIndex + 1
+            if(self._nextIndex == self._capacity):
+                self._nextIndex = 0
+    
+    def size(self):
+        return self._size
+
+    def sum(self):
+        sum = 0
+        for i in range(self._size):
+            sum = sum + self._values[i]
+        
+        return sum
+
 class Controller2D(object):
     def __init__(self, waypoints):
         self.vars                = cutils.CUtils()
@@ -53,6 +86,7 @@ class Controller2D(object):
         self._conv_rad_to_steer  = 180.0 / 70.0 / np.pi
         self._pi                 = np.pi
         self._2pi                = 2.0 * np.pi
+        self._v_error_rb         = ScalarRingBuffer(100)
 
     def update_values(self, x, y, yaw, speed, timestamp, frame):
         self._current_x         = x
@@ -211,16 +245,17 @@ class Controller2D(object):
                 access the persistent variables declared above here. For
                 example, can treat self.vars.v_previous like a "global variable".
             """
-            
-            k_p = 3.0
-            k_i = 1
-            k_d = -1.2
 
             v_error = v_desired - v
+            self._v_error_rb.insert(v_error)
+
+            k_p = 3.0
+            k_i = k_p / self._v_error_rb.size() * 0.3
+            k_d = k_p * -0.3
 
             throttle_p = v_error * k_p
             
-            v_error_integral = 0
+            v_error_integral = self._v_error_rb.sum()
             throttle_i = v_error_integral * k_i
 
             v_error_derivative = self.vars.v_error_previous - v_error
