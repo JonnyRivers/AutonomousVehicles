@@ -27,6 +27,9 @@ class ScalarRingBuffer:
             if(self._nextIndex == self._capacity):
                 self._nextIndex = 0
     
+    def size(self):
+        return self._size
+
     def sum(self):
         sum = 0
         for i in range(self._size):
