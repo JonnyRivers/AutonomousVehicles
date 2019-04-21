@@ -4,67 +4,10 @@
 2D Controller Class to be used for the CARLA waypoint follower demo.
 """
 
+import controller2d_math
 import cutils
 import numpy as np
-
-def heading_to_direction(heading):
-    return np.sin(heading), np.cos(heading)
-
-def normalize_heading(heading):
-    if(heading > np.pi):
-        heading = heading - (2 * np.pi)
-    
-    if(heading < -np.pi):
-        heading = heading + (2 * np.pi)
-    
-    return heading
-
-def direction_to_heading(x, y):
-    heading = np.arctan2(-x, y) + (np.pi / 2)
-    heading = normalize_heading(heading)
-    
-    return heading
-
-def get_dp(a, b):
-    a_x, a_y = heading_to_direction(a)
-    b_x, b_y = heading_to_direction(b)
-
-    dp = np.dot([a_x, a_y], [b_x, b_y])
-
-    return dp
-
-class ScalarRingBuffer:
-    def __init__(self, capacity):
-        if(capacity < 1):
-            raise Exception("capacity must be at least 1")
-
-        self._capacity = capacity
-        self._size = 0
-        self._nextIndex = 0
-        self._values = []
-
-    def insert(self, value):
-        if(self._size < self._capacity):
-            self._size = self._size + 1
-            self._nextIndex = self._nextIndex + 1
-            if(self._nextIndex == self._capacity):
-                self._nextIndex = 0
-            self._values.append(value)
-        else:
-            self._values[self._nextIndex] = value
-            self._nextIndex = self._nextIndex + 1
-            if(self._nextIndex == self._capacity):
-                self._nextIndex = 0
-    
-    def size(self):
-        return self._size
-
-    def sum(self):
-        sum = 0
-        for i in range(self._size):
-            sum = sum + self._values[i]
-        
-        return sum
+from scalar_ring_buffer import ScalarRingBuffer
 
 class Controller2D(object):
     def __init__(self, waypoints):
@@ -299,8 +242,8 @@ class Controller2D(object):
             y_e = heading_y - closest_y
 
             # TODO fix the goofiness here
-            yaw_desired = direction_to_heading(x_e, y_e)
-            yaw_e = normalize_heading(yaw_desired - yaw)
+            yaw_desired = controller2d_math.direction_to_heading(x_e, y_e)
+            yaw_e = controller2d_math.normalize_heading(yaw_desired - yaw)
             
             #print(f"yaw: {yaw}; yaw_desired: {yaw_desired}; pos: ({x},{y}); closest: ({closest_x},{closest_y});")
             #print(f" heading({heading_x},{heading_y}); pos_e({x_e}, {y_e})")
@@ -312,9 +255,9 @@ class Controller2D(object):
             distance_y_squared = distance_y * distance_y
             crosstrack_dist = np.sqrt(distance_x_squared + distance_y_squared)
 
-            angle_to_closest_waypoint = direction_to_heading(distance_x, distance_y)
-            right_of_heading = normalize_heading(yaw + np.pi / 2)
-            dp_right_to_waypoint = get_dp(right_of_heading, angle_to_closest_waypoint)
+            angle_to_closest_waypoint = controller2d_math.direction_to_heading(distance_x, distance_y)
+            right_of_heading = controller2d_math.normalize_heading(yaw + np.pi / 2)
+            dp_right_to_waypoint = controller2d_math.get_dp(right_of_heading, angle_to_closest_waypoint)
 
             crosstrack_e = 0
             if(np.abs(dp_right_to_waypoint) > 0.5):
