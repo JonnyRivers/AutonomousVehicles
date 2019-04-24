@@ -4,67 +4,10 @@
 2D Controller Class to be used for the CARLA waypoint follower demo.
 """
 
+import controller2d_math
 import cutils
 import numpy as np
-
-def heading_to_direction(heading):
-    return np.sin(heading), np.cos(heading)
-
-def normalize_heading(heading):
-    if(heading > np.pi):
-        heading = heading - (2 * np.pi)
-    
-    if(heading < -np.pi):
-        heading = heading + (2 * np.pi)
-    
-    return heading
-
-def direction_to_heading(x, y):
-    heading = np.arctan2(-x, y) + (np.pi / 2)
-    heading = normalize_heading(heading)
-    
-    return heading
-
-def get_dp(a, b):
-    a_x, a_y = heading_to_direction(a)
-    b_x, b_y = heading_to_direction(b)
-
-    dp = np.dot([a_x, a_y], [b_x, b_y])
-
-    return dp
-
-class ScalarRingBuffer:
-    def __init__(self, capacity):
-        if(capacity < 1):
-            raise Exception("capacity must be at least 1")
-
-        self._capacity = capacity
-        self._size = 0
-        self._nextIndex = 0
-        self._values = []
-
-    def insert(self, value):
-        if(self._size < self._capacity):
-            self._size = self._size + 1
-            self._nextIndex = self._nextIndex + 1
-            if(self._nextIndex == self._capacity):
-                self._nextIndex = 0
-            self._values.append(value)
-        else:
-            self._values[self._nextIndex] = value
-            self._nextIndex = self._nextIndex + 1
-            if(self._nextIndex == self._capacity):
-                self._nextIndex = 0
-    
-    def size(self):
-        return self._size
-
-    def sum(self):
-        sum = 0
-        for i in range(self._size):
-            sum = sum + self._values[i]
-        
-        return sum
+from scalar_ring_buffer import ScalarRingBuffer
 
 class Controller2D(object):
     def __init__(self, waypoints):
@@ -98,18 +41,17 @@ class Controller2D(object):
         if self._current_frame:
             self._start_control_loop = True
 
-    def get_closest_waypoint_index(self, x, y):
-        min_idx       = 0
-        min_dist      = float("inf")
+    def get_closest_waypoint_index(self, car_position):
+        min_idx = 0
+        min_dist = float("inf")
         for i in range(len(self._waypoints)):
-            dist = np.linalg.norm(np.array([
-                    self._waypoints[i][0] - x,
-                    self._waypoints[i][1] - y]))
+            waypoint_position = [self._waypoints[i][0], self._waypoints[i][1]]
+            dist = controller2d_math.vec2d_distance(car_position, waypoint_position)
             if dist < min_dist:
                 min_dist = dist
                 min_idx = i
 
-        if min_idx < len(self._waypoints)-1:
+        if min_idx < len(self._waypoints) - 1:
             return min_idx
         
         return -1
@@ -117,21 +59,15 @@ class Controller2D(object):
     def get_heading_waypoint_index(self, closest_waypoint_index, v):
         min_heading_waypoint_distance = max(1, v) # distance traveled in one second
         closest_waypoint = self._waypoints[closest_waypoint_index]
-        closest_waypoint_x = closest_waypoint[0]
-        closest_waypoint_y = closest_waypoint[1]
-        last_waypoint_to_check_index = len(self._waypoints)-1
-        for i in range(closest_waypoint_index+1, last_waypoint_to_check_index-1):
-            forward_waypoint = self._waypoints[i]
-            forward_waypoint_x = forward_waypoint[0]
-            forward_waypoint_y = forward_waypoint[1]
-            distance_x = forward_waypoint_x - closest_waypoint_x
-            distance_y = forward_waypoint_y - closest_waypoint_y
-            distance_x_squared = distance_x * distance_x
-            distance_y_squared = distance_y * distance_y
-            distance_to_forward_waypoint = np.sqrt(distance_x_squared + distance_y_squared)
+        closest_waypoint_position = [closest_waypoint[0], closest_waypoint[1]]
+        last_waypoint_to_check_index = len(self._waypoints) - 1
+        for i in range(closest_waypoint_index + 1, last_waypoint_to_check_index - 1):
+            forward_waypoint_position = [self._waypoints[i][0], self._waypoints[i][1]]
+            distance_to_forward_waypoint = controller2d_math.vec2d_distance(
+                closest_waypoint_position, forward_waypoint_position)
             if(distance_to_forward_waypoint > min_heading_waypoint_distance):
                 return i
-        
+
         return last_waypoint_to_check_index
     
     def update_waypoints(self, new_waypoints):
@@ -169,7 +105,8 @@ class Controller2D(object):
         t               = self._current_timestamp
         waypoints       = self._waypoints
 
-        closest_waypoint_index = self.get_closest_waypoint_index(x, y)
+        position = [x, y]
+        closest_waypoint_index = self.get_closest_waypoint_index(position)
         closest_waypoint = waypoints[closest_waypoint_index]
         v_desired = closest_waypoint[2]
 
@@ -271,7 +208,7 @@ class Controller2D(object):
             # brake_output is optional and is not required to pass the
             # assignment, as the car will naturally slow down over time.
             #throttle_output = 0
-            brake_output    = 0
+            brake_output = 0
 
             ######################################################
             ######################################################
@@ -284,45 +221,32 @@ class Controller2D(object):
                 example, can treat self.vars.v_previous like a "global variable".
             """
             
-            # Change the steer output with the lateral controller. 
+            # Change the steer output with the lateral controller
             steer_output = 0
 
             heading_waypoint_index = self.get_heading_waypoint_index(closest_waypoint_index, v)
             heading_waypoint = waypoints[heading_waypoint_index]
 
             # 1) Steer to align with desired heading
-            closest_x = closest_waypoint[0]
-            closest_y = closest_waypoint[1]
-            heading_x = heading_waypoint[0]
-            heading_y = heading_waypoint[1]
-            x_e = heading_x - closest_x
-            y_e = heading_y - closest_y
+            closest_waypoint_position = [closest_waypoint[0], closest_waypoint[1]]
+            heading_waypoint_position = [heading_waypoint[0], heading_waypoint[1]]
+            desired_direction = controller2d_math.vec2d_subtract(
+                heading_waypoint_position, closest_waypoint_position)
 
-            # TODO fix the goofiness here
-            yaw_desired = direction_to_heading(x_e, y_e)
-            yaw_e = normalize_heading(yaw_desired - yaw)
-            
-            #print(f"yaw: {yaw}; yaw_desired: {yaw_desired}; pos: ({x},{y}); closest: ({closest_x},{closest_y});")
-            #print(f" heading({heading_x},{heading_y}); pos_e({x_e}, {y_e})")
+            yaw_desired = controller2d_math.direction_to_heading(desired_direction)
+            yaw_e = controller2d_math.normalize_heading(yaw_desired - yaw)
 
             # 2) Steer to eliminate crosstrack error
-            distance_x = closest_waypoint[0] - x
-            distance_y = closest_waypoint[1] - y
-            distance_x_squared = distance_x * distance_x
-            distance_y_squared = distance_y * distance_y
-            crosstrack_dist = np.sqrt(distance_x_squared + distance_y_squared)
-
-            angle_to_closest_waypoint = direction_to_heading(distance_x, distance_y)
-            right_of_heading = normalize_heading(yaw + np.pi / 2)
-            dp_right_to_waypoint = get_dp(right_of_heading, angle_to_closest_waypoint)
+            crosstrack_dist = controller2d_math.vec2d_distance(position, closest_waypoint_position)
+            closest_waypoint_direction = controller2d_math.vec2d_subtract(closest_waypoint_position, position)
+            angle_to_closest_waypoint = controller2d_math.direction_to_heading(closest_waypoint_direction)
+            right_of_heading = controller2d_math.normalize_heading(yaw + np.pi / 2)
+            dp_right_to_waypoint = controller2d_math.get_dp(right_of_heading, angle_to_closest_waypoint)
 
             crosstrack_e = 0
             if(np.abs(dp_right_to_waypoint) > 0.5):
                 crosstrack_e = crosstrack_dist * dp_right_to_waypoint
             crosstrack_correction_steer = np.arctan(crosstrack_e / v)
-
-            #print(f"v_e: {v_error}; yaw_e: {yaw_e}; crosstrack_e: {crosstrack_e}")
-            #print(f"ccs: {crosstrack_correction_steer}; yaw: {yaw}; atcwp: {angle_to_closest_waypoint}; alpha: {alpha}")
 
             steer_output = yaw_e + crosstrack_correction_steer
 
