@@ -19,8 +19,8 @@ def normalize_heading(heading):
     
     return heading
 
-def direction_to_heading(x, y):
-    heading = np.arctan2(-x, y) + (np.pi / 2)
+def direction_to_heading(direction):
+    heading = np.arctan2(-direction[0], direction[1]) + (np.pi / 2)
     heading = normalize_heading(heading)
     
     return heading
@@ -32,3 +32,11 @@ def get_dp(a_heading, b_heading):
     dp = np.dot(a_direction, b_direction)
 
     return dp
+
+def vec2d_subtract(a, b):
+    return [a[0] - b[0], a[1] - b[1]]
+
+def vec2d_distance(a, b):
+    return np.linalg.norm(np.array([
+        b[0] - a[0],
+        b[1] - a[1]]))
